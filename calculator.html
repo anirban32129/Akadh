@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chalkboard Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --board: #1e3d2e;
+    --board-dark: #17301f;
+    --chalk: #eef2ea;
+    --chalk-dim: #b9c7ba;
+    --chalk-faint: #8ea390;
+    --chalk-yellow: #f2d98a;
+    --chalk-coral: #e8926a;
+    --frame: #6b4a34;
+    --frame-dark: #4a3122;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    background: var(--frame-dark);
+    background-image: linear-gradient(160deg, var(--frame) 0%, var(--frame-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Kalam', cursive;
+    padding: 24px;
+  }
+
+  .board {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    background: var(--board);
+    border-radius: 10px;
+    padding: 24px 22px 24px;
+    box-shadow:
+      0 0 0 10px var(--frame),
+      0 0 0 13px var(--frame-dark),
+      0 25px 50px rgba(0,0,0,0.5),
+      inset 0 0 60px rgba(0,0,0,0.35);
+    overflow: hidden;
+  }
+
+  .board::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image:
+      radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.15), transparent),
+      radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,0.12), transparent),
+      radial-gradient(1.5px 1.5px at 60% 70%, rgba(255,255,255,0.1), transparent),
+      radial-gradient(1px 1px at 30% 85%, rgba(255,255,255,0.15), transparent),
+      radial-gradient(1px 1px at 90% 60%, rgba(255,255,255,0.1), transparent),
+      radial-gradient(2px 2px at 45% 40%, rgba(255,255,255,0.08), transparent);
+    background-size: 300px 300px;
+  }
+
+  .title {
+    color: var(--chalk-dim);
+    font-size: 15px;
+    letter-spacing: 1px;
+    margin: 0 2px 12px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 2px dashed rgba(238,242,234,0.2);
+    padding-bottom: 10px;
+  }
+  .title span { color: var(--chalk-yellow); }
+
+  .mode-tabs {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .mode-tab {
+    flex: 1;
+    text-align: center;
+    padding: 6px 0;
+    font-family: 'Kalam', cursive;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--chalk-dim);
+    border: 1.5px dashed rgba(238,242,234,0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
+  }
+  .mode-tab.active {
+    color: var(--board-dark);
+    border-color: var(--chalk-yellow);
+    border-style: solid;
+    background: var(--chalk-yellow);
+  }
+
+  .frac-hint {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    color: var(--chalk-faint);
+    font-size: 11.5px;
+    margin: -2px 0 8px;
+  }
+
+  .display {
+    position: relative;
+    z-index: 1;
+    text-align: right;
+    padding: 8px 14px 14px;
+    margin-bottom: 16px;
+    min-height: 128px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .expression {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--chalk-dim);
+    font-size: 14px;
+    min-height: 18px;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  .steps {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--chalk-faint);
+    font-size: 12.5px;
+    line-height: 1.65;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    text-align: right;
+  }
+  .steps.show { max-height: 140px; overflow-y: auto; }
+  .steps div { white-space: nowrap; }
+
+  .result {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--chalk);
+    font-size: 38px;
+    font-weight: 500;
+    line-height: 1.1;
+    word-break: break-all;
+    min-height: 46px;
+  }
+
+  .frac-widget { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .frac-sign { color: var(--chalk); font-size: 30px; }
+  .frac-seg {
+    min-width: 26px;
+    text-align: center;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1.5px dashed transparent;
+    color: var(--chalk);
+  }
+  .frac-seg.placeholder { color: var(--chalk-faint); }
+  .frac-seg.active { border-color: var(--chalk-yellow); border-style: solid; background: rgba(242,217,138,0.14); }
+  .frac-whole-box { font-size: 34px; }
+  .frac-stack { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+  .frac-stack .frac-seg { font-size: 21px; padding: 0 8px; }
+  .frac-bar { width: 100%; height: 2px; background: var(--chalk); margin: 2px 0; border-radius: 1px; }
+
+  .underline {
+    align-self: flex-end;
+    height: 3px;
+    width: 0;
+    background: var(--chalk);
+    border-radius: 2px;
+    transition: width 0.25s ease;
+    opacity: 0;
+  }
+  .underline.show { opacity: 0.8; }
+
+  .pad {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  button {
+    font-family: 'Kalam', cursive;
+    font-weight: 700;
+    font-size: 20px;
+    padding: 16px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--chalk);
+    background: rgba(238,242,234,0.06);
+    border: 1.5px solid rgba(238,242,234,0.35);
+    transition: transform 0.08s ease, background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: scale(0.94); background: rgba(238,242,234,0.18); }
+  button:hover { background: rgba(238,242,234,0.12); }
+
+  button.op { color: var(--chalk-yellow); border-color: rgba(242,217,138,0.45); }
+  button.op.active { background: rgba(242,217,138,0.22); }
+
+  button.func { color: var(--chalk-coral); border-color: rgba(232,146,106,0.45); font-size: 16px; }
+  button.func.disabled { opacity: 0.3; pointer-events: none; }
+
+  button.equals {
+    background: var(--chalk-yellow);
+    color: var(--board-dark);
+    border-color: var(--chalk-yellow);
+    grid-row: span 2;
+  }
+  button.equals:hover { background: #f5e2a3; }
+
+  button.zero { grid-column: span 2; }
+
+  button:focus-visible { outline: 2px solid var(--chalk-yellow); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    button, .underline, .steps { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="title">mr. chalk's <span>arithmetic</span> slate</div>
+
+  <div class="mode-tabs">
+    <button type="button" class="mode-tab active" id="tabDecimal">123</button>
+    <button type="button" class="mode-tab" id="tabFraction">a/b &amp; mixed</button>
+  </div>
+  <div class="frac-hint" id="fracHint" style="display:none;">tap whole · num · den, then type digits</div>
+
+  <div class="display">
+    <div class="expression" id="expression">&nbsp;</div>
+    <div class="steps" id="steps"></div>
+    <div class="result" id="result">0</div>
+    <div class="underline" id="underline"></div>
+  </div>
+
+  <div class="pad">
+    <button class="func" data-action="clear">C</button>
+    <button class="func" data-action="sign">±</button>
+    <button class="func" data-action="percent">%</button>
+    <button class="op" data-action="op" data-op="÷">÷</button>
+
+    <button data-action="digit" data-val="7">7</button>
+    <button data-action="digit" data-val="8">8</button>
+    <button data-action="digit" data-val="9">9</button>
+    <button class="op" data-action="op" data-op="×">×</button>
+
+    <button data-action="digit" data-val="4">4</button>
+    <button data-action="digit" data-val="5">5</button>
+    <button data-action="digit" data-val="6">6</button>
+    <button class="op" data-action="op" data-op="−">−</button>
+
+    <button data-action="digit" data-val="1">1</button>
+    <button data-action="digit" data-val="2">2</button>
+    <button data-action="digit" data-val="3">3</button>
+    <button class="op" data-action="op" data-op="+">+</button>
+
+    <button class="zero" data-action="digit" data-val="0">0</button>
+    <button data-action="decimal">.</button>
+    <button class="equals" data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const exprEl = document.getElementById('expression');
+  const stepsEl = document.getElementById('steps');
+  const resultEl = document.getElementById('result');
+  const underlineEl = document.getElementById('underline');
+  const buttons = document.querySelectorAll('.pad button');
+  const decBtn = document.querySelector('button[data-action="decimal"]');
+  const pctBtn = document.querySelector('button[data-action="percent"]');
+  const tabDecimal = document.getElementById('tabDecimal');
+  const tabFraction = document.getElementById('tabFraction');
+  const fracHint = document.getElementById('fracHint');
+
+  const opDisplay = { '+': '+', '-': '−', '*': '×', '/': '÷' };
+  const opInternal = { '+': '+', '−': '-', '×': '*', '÷': '/' };
+
+  let mode = 'decimal';
+
+  /* ---------------- shared helpers ---------------- */
+
+  function hideSteps() {
+    stepsEl.classList.remove('show');
+    stepsEl.innerHTML = '';
+  }
+
+  function fireUnderline() {
+    underlineEl.classList.remove('show');
+    underlineEl.style.width = '0';
+    void underlineEl.offsetWidth;
+    requestAnimationFrame(() => {
+      underlineEl.classList.add('show');
+      underlineEl.style.width = Math.min(resultEl.offsetWidth, 220) + 'px';
+    });
+  }
+
+  /* ================================================
+     DECIMAL MODE
+     ================================================ */
+
+  let tokens = [];
+  let currentInput = '0';
+  let justEvaluated = false;
+
+  function formatNumber(value) {
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (!isFinite(num)) return 'Error';
+    let str = num.toString();
+    if (str.length > 14) str = parseFloat(num.toPrecision(12)).toString();
+    return str;
+  }
+
+  function liveExpression() {
+    const parts = tokens.map(t => typeof t === 'number' ? formatNumber(t) : opDisplay[t]);
+    if (currentInput !== '') parts.push(currentInput);
+    return parts.join(' ');
+  }
+
+  function updateDisplay() {
+    exprEl.textContent = liveExpression() || '\u00A0';
+    resultEl.textContent = currentInput === '' ? '0' : currentInput;
+    buttons.forEach(b => b.classList.remove('active'));
+    const lastOp = [...tokens].reverse().find(t => typeof t !== 'number');
+    if (lastOp && currentInput === '') {
+      const btn = document.querySelector(`button[data-op="${opDisplay[lastOp]}"]`);
+      if (btn) btn.classList.add('active');
+    }
+  }
+
+  function clearAll() {
+    tokens = [];
+    currentInput = '0';
+    justEvaluated = false;
+    hideSteps();
+    underlineEl.classList.remove('show');
+    underlineEl.style.width = '0';
+    updateDisplay();
+  }
+
+  function inputDigit(d) {
+    if (justEvaluated) { tokens = []; currentInput = ''; justEvaluated = false; hideSteps(); }
+    if (currentInput === '0') currentInput = d;
+    else currentInput = currentInput + d;
+    updateDisplay();
+  }
+
+  function inputDecimal() {
+    if (justEvaluated) { tokens = []; currentInput = ''; justEvaluated = false; hideSteps(); }
+    if (currentInput === '') currentInput = '0.';
+    else if (!currentInput.includes('.')) currentInput += '.';
+    updateDisplay();
+  }
+
+  function toggleSign() {
+    if (currentInput === '') currentInput = '0';
+    currentInput = currentInput.startsWith('-') ? currentInput.slice(1) : '-' + currentInput;
+    updateDisplay();
+  }
+
+  function percent() {
+    if (currentInput === '') currentInput = '0';
+    const num = parseFloat(currentInput);
+    if (isNaN(num)) return;
+    currentInput = formatNumber(num / 100);
+    updateDisplay();
+  }
+
+  function chooseOperator(symbol) {
+    const op = opInternal[symbol];
+    hideSteps();
+    if (justEvaluated) {
+      justEvaluated = false;
+      tokens = [parseFloat(currentInput)];
+      currentInput = '';
+      tokens.push(op);
+      updateDisplay();
+      return;
+    }
+    if (currentInput === '') {
+      if (tokens.length > 0 && typeof tokens[tokens.length - 1] !== 'number') {
+        tokens[tokens.length - 1] = op;
+      }
+      updateDisplay();
+      return;
+    }
+    tokens.push(parseFloat(currentInput));
+    tokens.push(op);
+    currentInput = '';
+    updateDisplay();
+  }
+
+  function computeNum(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '-': return a - b;
+      case '*': return a * b;
+      case '/': return b === 0 ? NaN : a / b;
+    }
+  }
+
+  function reduceTokens(list) {
+    const work = list.slice();
+    const steps = [];
+    const passes = [['*', '/'], ['+', '-']];
+    passes.forEach(opsToMatch => {
+      let i = 1;
+      while (i < work.length) {
+        if (opsToMatch.includes(work[i])) {
+          const a = work[i - 1], op = work[i], b = work[i + 1];
+          const result = computeNum(a, b, op);
+          steps.push({ a, op, b, result });
+          work.splice(i - 1, 3, result);
+        } else {
+          i += 2;
+        }
+      }
+    });
+    return { result: work[0], steps };
+  }
+
+  function equals() {
+    if (currentInput !== '') { tokens.push(parseFloat(currentInput)); currentInput = ''; }
+    if (tokens.length < 3 || typeof tokens[tokens.length - 1] !== 'number') return;
+
+    const { result, steps } = reduceTokens(tokens);
+    const finalStr = formatNumber(result);
+
+    const exprParts = tokens.map(t => typeof t === 'number' ? formatNumber(t) : opDisplay[t]);
+    exprEl.textContent = exprParts.join(' ') + ' =';
+
+    hideSteps();
+    if (steps.length > 1) {
+      steps.forEach(s => {
+        const line = document.createElement('div');
+        line.textContent = `${formatNumber(s.a)} ${opDisplay[s.op]} ${formatNumber(s.b)} = ${formatNumber(s.result)}`;
+        stepsEl.appendChild(line);
+      });
+      stepsEl.classList.add('show');
+    }
+
+    resultEl.textContent = finalStr;
+    currentInput = finalStr;
+    tokens = [];
+    justEvaluated = true;
+    fireUnderline();
+  }
+
+  function backspace() {
+    if (justEvaluated) { clearAll(); return; }
+    if (currentInput !== '') {
+      currentInput = currentInput.length > 1 ? currentInput.slice(0, -1) : '';
+      updateDisplay();
+      return;
+    }
+    if (tokens.length >= 2 && typeof tokens[tokens.length - 1] !== 'number') {
+      tokens.pop();
+      currentInput = formatNumber(tokens.pop());
+      updateDisplay();
+    }
+  }
+
+  /* ================================================
+     FRACTION MODE
+     ================================================ */
+
+  let fracTokens = [];
+  let seg = { whole: '', num: '', den: '' };
+  let activeSeg = 'num';
+  let fracNegative = false;
+  let fracJustEvaluated = false;
+  let lastFractionResult = { n: 0, d: 1 };
+
+  function gcd(a, b) {
+    a = Math.abs(a); b = Math.abs(b);
+    while (b) { const t = a % b; a = b; b = t; }
+    return a || 1;
+  }
+  function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
+
+  function simplifyFrac(f) {
+    let n = f.n, d = f.d;
+    if (d < 0) { n = -n; d = -d; }
+    const g = gcd(n, d) || 1;
+    return { n: n / g, d: d / g };
+  }
+
+  function rawFracString(f) {
+    return f.d === 1 ? `${f.n}` : `${f.n}/${f.d}`;
+  }
+
+  function fracToMixedString(f) {
+    const sign = f.n < 0 ? '-' : '';
+    const an = Math.abs(f.n);
+    if (f.d === 1) return `${sign}${an}`;
+    const whole = Math.floor(an / f.d);
+    const rem = an % f.d;
+    if (rem === 0) return `${sign}${whole}`;
+    if (whole === 0) return `${sign}${rem}/${f.d}`;
+    return `${sign}${whole} ${rem}/${f.d}`;
+  }
+
+  function buildFractionFromSegs() {
+    const whole = seg.whole === '' ? 0 : parseInt(seg.whole, 10);
+    const num = seg.num === '' ? 0 : parseInt(seg.num, 10);
+    const den = seg.den === '' ? 1 : (parseInt(seg.den, 10) || 1);
+    let n = whole * den + num;
+    if (fracNegative) n = -n;
+    return { n, d: den };
+  }
+
+  function fractionToSegs(f) {
+    const sign = f.n < 0;
+    const an = Math.abs(f.n);
+    const whole = Math.floor(an / f.d);
+    const rem = an % f.d;
+    fracNegative = sign;
+    return { whole: whole ? String(whole) : '', num: String(rem), den: String(f.d) };
+  }
+
+  function fractionEntryHasContent() {
+    return seg.whole !== '' || seg.num !== '' || seg.den !== '' || fracNegative;
+  }
+
+  function liveEntryString() {
+    if (!fractionEntryHasContent()) return '';
+    const sign = fracNegative ? '-' : '';
+    const w = seg.whole !== '' ? seg.whole : '';
+    const n = seg.num !== '' ? seg.num : '0';
+    const dShown = seg.den !== '' ? seg.den : '1';
+    if (w !== '') return `${sign}${w} ${n}/${dShown}`;
+    return `${sign}${n}/${dShown}`;
+  }
+
+  function liveFractionExpression() {
+    const parts = fracTokens.map(t => typeof t === 'object' ? rawFracString(t) : opDisplay[t]);
+    const entryStr = liveEntryString();
+    if (entryStr) parts.push(entryStr);
+    return parts.join(' ');
+  }
+
+  function renderFractionEntry() {
+    const wholeVal = seg.whole === '' ? '0' : seg.whole;
+    const numVal = seg.num === '' ? '0' : seg.num;
+    const denVal = seg.den === '' ? '1' : seg.den;
+    const wholePh = seg.whole === '' ? ' placeholder' : '';
+    const numPh = seg.num === '' ? ' placeholder' : '';
+    const denPh = seg.den === '' ? ' placeholder' : '';
+    resultEl.innerHTML =
+      '<span class="frac-widget">' +
+      (fracNegative ? '<span class="frac-sign">\u2212</span>' : '') +
+      `<span class="frac-seg frac-whole-box${wholePh}${activeSeg === 'whole' ? ' active' : ''}" data-seg="whole">${wholeVal}</span>` +
+      '<span class="frac-stack">' +
+      `<span class="frac-seg${numPh}${activeSeg === 'num' ? ' active' : ''}" data-seg="num">${numVal}</span>` +
+      '<span class="frac-bar"></span>' +
+      `<span class="frac-seg${denPh}${activeSeg === 'den' ? ' active' : ''}" data-seg="den">${denVal}</span>` +
+      '</span></span>';
+  }
+
+  function updateFractionDisplay() {
+    exprEl.textContent = liveFractionExpression() || '\u00A0';
+    if (!fracJustEvaluated) renderFractionEntry();
+    buttons.forEach(b => b.classList.remove('active'));
+    const lastOp = [...fracTokens].reverse().find(t => typeof t !== 'object');
+    if (lastOp && !fractionEntryHasContent()) {
+      const btn = document.querySelector(`button[data-op="${opDisplay[lastOp]}"]`);
+      if (btn) btn.classList.add('active');
+    }
+  }
+
+  function clearFraction() {
+    fracTokens = [];
+    seg = { whole: '', num: '', den: '' };
+    activeSeg = 'num';
+    fracNegative = false;
+    fracJustEvaluated = false;
+    hideSteps();
+    underlineEl.classList.remove('show');
+    underlineEl.style.width = '0';
+    updateFractionDisplay();
+  }
+
+  function fractionInputDigit(d) {
+    if (fracJustEvaluated) {
+      fracTokens = []; seg = { whole: '', num: '', den: '' };
+      fracNegative = false; activeSeg = 'num'; fracJustEvaluated = false;
+      hideSteps();
+    }
+    let cur = seg[activeSeg];
+    cur = cur === '0' ? d : cur + d;
+    cur = cur.replace(/^0+(?=\d)/, '');
+    seg[activeSeg] = cur;
+    updateFractionDisplay();
+  }
+
+  function fractionNextSeg() {
+    const order = ['whole', 'num', 'den'];
+    const idx = order.indexOf(activeSeg);
+    activeSeg = order[(idx + 1) % order.length];
+    updateFractionDisplay();
+  }
+
+  function fractionToggleSign() {
+    fracNegative = !fracNegative;
+    updateFractionDisplay();
+  }
+
+  function fractionBackspace() {
+    if (fracJustEvaluated) { clearFraction(); return; }
+    if (seg[activeSeg] !== '') {
+      seg[activeSeg] = seg[activeSeg].slice(0, -1);
+      updateFractionDisplay();
+      return;
+    }
+    const order = ['den', 'num', 'whole'];
+    const idx = order.indexOf(activeSeg);
+    if (idx < order.length - 1) {
+      activeSeg = order[idx + 1];
+      updateFractionDisplay();
+      return;
+    }
+    if (fracNegative) { fracNegative = false; updateFractionDisplay(); return; }
+    if (fracTokens.length >= 2 && typeof fracTokens[fracTokens.length - 1] !== 'object') {
+      fracTokens.pop();
+      const prev = fracTokens.pop();
+      seg = fractionToSegs(prev);
+      activeSeg = 'num';
+      updateFractionDisplay();
+    }
+  }
+
+  function chooseFractionOperator(symbol) {
+    const op = opInternal[symbol];
+    hideSteps();
+    if (fracJustEvaluated) {
+      fracJustEvaluated = false;
+      fracTokens = [lastFractionResult];
+      seg = { whole: '', num: '', den: '' };
+      fracNegative = false; activeSeg = 'num';
+      fracTokens.push(op);
+      updateFractionDisplay();
+      return;
+    }
+    if (!fractionEntryHasContent()) {
+      if (fracTokens.length > 0 && typeof fracTokens[fracTokens.length - 1] !== 'object') {
+        fracTokens[fracTokens.length - 1] = op;
+      }
+      updateFractionDisplay();
+      return;
+    }
+    fracTokens.push(buildFractionFromSegs());
+    fracTokens.push(op);
+    seg = { whole: '', num: '', den: '' };
+    fracNegative = false; activeSeg = 'num';
+    updateFractionDisplay();
+  }
+
+  function fracAdd(a, b) {
+    const l = lcm(a.d, b.d);
+    const an = a.n * (l / a.d), bn = b.n * (l / b.d);
+    const raw = { n: an + bn, d: l };
+    const simplified = simplifyFrac(raw);
+    const lines = [];
+    if (a.d !== l || b.d !== l) lines.push(`${rawFracString(a)} + ${rawFracString(b)} = ${an}/${l} + ${bn}/${l}`);
+    lines.push(`${an}/${l} + ${bn}/${l} = ${rawFracString(raw)}`);
+    if (simplified.n !== raw.n || simplified.d !== raw.d) lines.push(`${rawFracString(raw)} = ${rawFracString(simplified)}`);
+    return { result: simplified, lines };
+  }
+
+  function fracSub(a, b) {
+    const l = lcm(a.d, b.d);
+    const an = a.n * (l / a.d), bn = b.n * (l / b.d);
+    const raw = { n: an - bn, d: l };
+    const simplified = simplifyFrac(raw);
+    const lines = [];
+    if (a.d !== l || b.d !== l) lines.push(`${rawFracString(a)} \u2212 ${rawFracString(b)} = ${an}/${l} \u2212 ${bn}/${l}`);
+    lines.push(`${an}/${l} \u2212 ${bn}/${l} = ${rawFracString(raw)}`);
+    if (simplified.n !== raw.n || simplified.d !== raw.d) lines.push(`${rawFracString(raw)} = ${rawFracString(simplified)}`);
+    return { result: simplified, lines };
+  }
+
+  function fracMul(a, b) {
+    const raw = { n: a.n * b.n, d: a.d * b.d };
+    const simplified = simplifyFrac(raw);
+    const lines = [`${rawFracString(a)} \u00d7 ${rawFracString(b)} = (${a.n}\u00d7${b.n})/(${a.d}\u00d7${b.d}) = ${rawFracString(raw)}`];
+    if (simplified.n !== raw.n || simplified.d !== raw.d) lines.push(`${rawFracString(raw)} = ${rawFracString(simplified)}`);
+    return { result: simplified, lines };
+  }
+
+  function fracDiv(a, b) {
+    if (b.n === 0) return { result: { n: NaN, d: 1 }, lines: [`${rawFracString(a)} \u00f7 0 = undefined`] };
+    const sign = b.n < 0 ? -1 : 1;
+    const recip = { n: b.d * sign, d: Math.abs(b.n) };
+    const raw = { n: a.n * recip.n, d: a.d * recip.d };
+    const simplified = simplifyFrac(raw);
+    const lines = [
+      `${rawFracString(a)} \u00f7 ${rawFracString(b)} = ${rawFracString(a)} \u00d7 ${rawFracString(recip)}`,
+      `${rawFracString(a)} \u00d7 ${rawFracString(recip)} = ${rawFracString(raw)}`
+    ];
+    if (simplified.n !== raw.n || simplified.d !== raw.d) lines.push(`${rawFracString(raw)} = ${rawFracString(simplified)}`);
+    return { result: simplified, lines };
+  }
+
+  function reduceFractionTokens(list) {
+    const work = list.slice();
+    let lines = [];
+    const passes = [['*', '/'], ['+', '-']];
+    passes.forEach(opsToMatch => {
+      let i = 1;
+      while (i < work.length) {
+        if (opsToMatch.includes(work[i])) {
+          const a = work[i - 1], op = work[i], b = work[i + 1];
+          let outcome;
+          if (op === '+') outcome = fracAdd(a, b);
+          else if (op === '-') outcome = fracSub(a, b);
+          else if (op === '*') outcome = fracMul(a, b);
+          else outcome = fracDiv(a, b);
+          lines = lines.concat(outcome.lines);
+          work.splice(i - 1, 3, outcome.result);
+        } else {
+          i += 2;
+        }
+      }
+    });
+    const finalSimplified = simplifyFrac(work[0]);
+    const mixedStr = fracToMixedString(finalSimplified);
+    if (mixedStr !== rawFracString(finalSimplified)) lines.push(`${rawFracString(finalSimplified)} = ${mixedStr}`);
+    return { result: finalSimplified, lines };
+  }
+
+  function equalsFraction() {
+    let list = fracTokens.slice();
+    if (fractionEntryHasContent() || list.length === 0) list.push(buildFractionFromSegs());
+    if (list.length === 0) return;
+    if (list.length % 2 === 0) return;
+
+    hideSteps();
+    let finalFrac, allLines = [], exprStr;
+
+    if (list.length === 1) {
+      const original = list[0];
+      const simplified = simplifyFrac(original);
+      exprStr = rawFracString(original) + ' =';
+      if (simplified.n !== original.n || simplified.d !== original.d) {
+        allLines.push(`${rawFracString(original)} = ${rawFracString(simplified)}`);
+      }
+      const mixedStr = fracToMixedString(simplified);
+      if (mixedStr !== rawFracString(simplified)) {
+        allLines.push(`${rawFracString(simplified)} = ${mixedStr}`);
+      }
+      finalFrac = simplified;
+    } else {
+      const { result, lines } = reduceFractionTokens(list);
+      exprStr = list.map(t => typeof t === 'object' ? rawFracString(t) : opDisplay[t]).join(' ') + ' =';
+      allLines = lines;
+      finalFrac = result;
+    }
+
+    exprEl.textContent = exprStr;
+    if (allLines.length > 0) {
+      allLines.forEach(line => {
+        const div = document.createElement('div');
+        div.textContent = line;
+        stepsEl.appendChild(div);
+      });
+      stepsEl.classList.add('show');
+    }
+
+    const finalStr = fracToMixedString(finalFrac);
+    resultEl.textContent = finalStr;
+    lastFractionResult = finalFrac;
+    fracTokens = [];
+    seg = { whole: '', num: '', den: '' };
+    fracNegative = false; activeSeg = 'num';
+    fracJustEvaluated = true;
+    fireUnderline();
+  }
+
+  resultEl.addEventListener('click', (e) => {
+    if (mode !== 'fraction' || fracJustEvaluated) return;
+    const segEl = e.target.closest('[data-seg]');
+    if (!segEl) return;
+    activeSeg = segEl.dataset.seg;
+    updateFractionDisplay();
+  });
+
+  /* ================================================
+     MODE SWITCHING
+     ================================================ */
+
+  function switchMode(newMode) {
+    if (newMode === mode) return;
+    mode = newMode;
+    tabDecimal.classList.toggle('active', mode === 'decimal');
+    tabFraction.classList.toggle('active', mode === 'fraction');
+    fracHint.style.display = mode === 'fraction' ? 'block' : 'none';
+    if (mode === 'fraction') {
+      decBtn.textContent = '\u21e5';
+      pctBtn.classList.add('disabled');
+      clearFraction();
+    } else {
+      decBtn.textContent = '.';
+      pctBtn.classList.remove('disabled');
+      clearAll();
+    }
+  }
+
+  tabDecimal.addEventListener('click', () => switchMode('decimal'));
+  tabFraction.addEventListener('click', () => switchMode('fraction'));
+
+  /* ================================================
+     INPUT DISPATCH
+     ================================================ */
+
+  document.querySelector('.pad').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === 'digit') mode === 'fraction' ? fractionInputDigit(btn.dataset.val) : inputDigit(btn.dataset.val);
+    else if (action === 'decimal') mode === 'fraction' ? fractionNextSeg() : inputDecimal();
+    else if (action === 'clear') mode === 'fraction' ? clearFraction() : clearAll();
+    else if (action === 'sign') mode === 'fraction' ? fractionToggleSign() : toggleSign();
+    else if (action === 'percent') { if (mode !== 'fraction') percent(); }
+    else if (action === 'op') mode === 'fraction' ? chooseFractionOperator(btn.dataset.op) : chooseOperator(btn.dataset.op);
+    else if (action === 'equals') mode === 'fraction' ? equalsFraction() : equals();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (mode === 'fraction') {
+      if (e.key >= '0' && e.key <= '9') fractionInputDigit(e.key);
+      else if (e.key === 'Tab') { e.preventDefault(); fractionNextSeg(); }
+      else if (e.key === '+') chooseFractionOperator('+');
+      else if (e.key === '-') chooseFractionOperator('\u2212');
+      else if (e.key === '*') chooseFractionOperator('\u00d7');
+      else if (e.key === '/') { e.preventDefault(); chooseFractionOperator('\u00f7'); }
+      else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equalsFraction(); }
+      else if (e.key === 'Escape') clearFraction();
+      else if (e.key === 'Backspace') { e.preventDefault(); fractionBackspace(); }
+    } else {
+      if (e.key >= '0' && e.key <= '9') inputDigit(e.key);
+      else if (e.key === '.') inputDecimal();
+      else if (e.key === '+') chooseOperator('+');
+      else if (e.key === '-') chooseOperator('\u2212');
+      else if (e.key === '*') chooseOperator('\u00d7');
+      else if (e.key === '/') { e.preventDefault(); chooseOperator('\u00f7'); }
+      else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equals(); }
+      else if (e.key === 'Escape') clearAll();
+      else if (e.key === 'Backspace') { e.preventDefault(); backspace(); }
+      else if (e.key === '%') percent();
+    }
+  });
+
+  updateDisplay();
+})();
+</script>
+
+</body>
+</html>
